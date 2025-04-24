@@ -3,6 +3,8 @@ import { Menu } from "@grammyjs/menu";
 import { getSheetData, insertClient } from "./googleSheets";
 // import { format } from "date-fns";
 // import { ru } from "date-fns/locale";
+import dotenv from "dotenv";
+dotenv.config();
 
 interface SessionData {
   step: "idle" | "awaiting_phone" | "awaiting_name" | "awaiting_date";
@@ -15,9 +17,7 @@ interface SessionData {
 
 type MyContext = Context & SessionFlavor<SessionData>;
 
-const bot = new Bot<MyContext>(
-  "8024617224:AAHgNB5iVaUcAaPKjjHQq-btfvB3oNY39ls"
-);
+const bot = new Bot<MyContext>(process.env.BOT_ID as string);
 
 // Middleware to handle sessions
 bot.use(
@@ -70,7 +70,7 @@ bot.callbackQuery(/^time:/, async (ctx) => {
   await ctx.deleteMessage();
   await ctx.reply(`✅Вы записаны на: ${dateRange} в ${hours}:${minutes}`);
 
-  insertClient(dateRange, `${hours}:${minutes}`)
+  insertClient(dateRange, `${hours}:${minutes}`);
 });
 
 opsMenu.register(datesMenu);

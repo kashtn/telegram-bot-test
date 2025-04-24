@@ -10,7 +10,6 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
-const SHEET_ID = "1-Uv79rSNolLH4UMJZPIs6KBL-TFd4MtjllYECHyJBNw";
 const RANGE = "Sheet1!A3:E3"; // диапазон, откуда читаем
 
 const getAuth = async () => {
@@ -47,7 +46,7 @@ export async function getSheetData() {
   const sheets = google.sheets({ version: "v4", auth: client });
 
   const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: SHEET_ID,
+    spreadsheetId: process.env.SHEET_ID,
     range: RANGE,
   });
 
@@ -69,7 +68,7 @@ export async function insertClient(date: string, time: string) {
   const sheets = google.sheets({ version: "v4", auth: client });
   //   await sheets.spreadsheets.values.
   const res = await sheets.spreadsheets.values.append({
-    spreadsheetId: SHEET_ID,
+    spreadsheetId: process.env.SHEET_ID,
     range: RANGE,
     valueInputOption: "USER_ENTERED",
     requestBody: {
