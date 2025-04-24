@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import * as dotenv from "dotenv";
 import path from "path";
+import fs from "fs";
 
 import { fileURLToPath } from "url";
 
@@ -12,13 +13,37 @@ dotenv.config();
 const SHEET_ID = "1-Uv79rSNolLH4UMJZPIs6KBL-TFd4MtjllYECHyJBNw";
 const RANGE = "Sheet1!A3:E3"; // диапазон, откуда читаем
 
-export async function getSheetData() {
-  const auth = new google.auth.GoogleAuth({
-    keyFile: path.resolve(__dirname, "../credentials.json"),
-    scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
-  });
+const getAuth = async () => {
+  let auth;
 
+  if (process.env.GOOGLE_CREDENTIALS) {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    });
+  } else {
+    const credentialsPath = path.resolve(__dirname, "../credentials.json");
+
+    if (!fs.existsSync(credentialsPath)) {
+      throw new Error(
+        "credentials.json not found and GOOGLE_CREDENTIALS not set"
+      );
+    }
+
+    auth = new google.auth.GoogleAuth({
+      keyFile: credentialsPath,
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    });
+  }
+
+  return auth;
+};
+
+export async function getSheetData() {
+  const auth = await getAuth();
   const client = await auth.getClient();
+
   const sheets = google.sheets({ version: "v4", auth: client });
 
   const res = await sheets.spreadsheets.values.get({
