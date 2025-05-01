@@ -1,21 +1,22 @@
 import { Menu } from "@grammyjs/menu";
 import { EMenu } from "./EMenu";
-import supabaseClient from "../supabase";
+import { getUsersAppointmentsByTelegramId } from "../api";
 
 const mainMenu = new Menu("main-menu")
-  .submenu("📝 Записаться", EMenu.procedureMenu)
+  .submenu("📝 Записаться", EMenu.procedureMenu, async (ctx) => {
+    await ctx.editMessageText("Выберите процедуру:");
+  })
   .row()
   .text("📅 Мои записи", async (ctx) => {
-    let { data: appointments, error } = await supabaseClient
-      .from("appointments")
-      .select("*, procedures(translation)")
-      .eq("telegram_id", ctx.session.telegramId);
+    let { appointments, error } = await getUsersAppointmentsByTelegramId(
+      String(ctx.session.user.telegramId)
+    );
 
     appointments?.forEach(async (appointment, index) => {
       await ctx.reply(
         `Запись ${index + 1}: ${appointment.procedures.translation}, ${
           appointment.date
-        }, ${appointment.slot_time}`
+        }, ${appointment.time_slot}, Mастер: ${appointment.masters.name}`
       );
     });
   })

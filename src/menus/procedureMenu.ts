@@ -1,23 +1,25 @@
 import { Menu } from "@grammyjs/menu";
 import { EMenu } from "./EMenu";
 import weekMenu from "./weekMenu";
-import supabaseClient from "../supabase";
+import { getAllProcedures, IProcedure } from "../api";
 
 const procedureMenu = new Menu(EMenu.procedureMenu).dynamic(
   async (ctx, range) => {
-    let { data: procedures, error } = await supabaseClient
-      .from("procedures")
-      .select("id, name, translation");
+    let { procedures, error } = await getAllProcedures();
 
-    console.log("procedures error", error);
+    console.log("ctxctxctxctxctxctxctx", ctx.session);
+
+    ctx.session.allProcedures = procedures?.reduce((acc, procedure) => {
+      acc[procedure.id] = { ...procedure };
+      return acc;
+    }, {} as Record<string, IProcedure>);
 
     procedures?.map((procedure) => {
       range
-        .text(procedure.translation, async (ctx) => {
-          await ctx.deleteMessage();
+        .submenu(procedure.translation, EMenu.weekMenu, async (ctx) => {
+          ctx.session.appointment.procedureId = procedure.id;
 
-          await ctx.reply("Выберите дату:", { reply_markup: weekMenu });
-          ctx.session.chosenProcedure = procedure.id;
+          await ctx.editMessageText("Выберите неделю:");
         })
         .row();
     });

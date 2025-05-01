@@ -6,7 +6,6 @@ import {
   SessionFlavor,
   MemorySessionStorage,
 } from "grammy";
-import { getSheetData, insertClient } from "./googleSheets";
 import dotenv from "dotenv";
 import { EMenu } from "./menus/EMenu";
 import mainMenu from "./menus/mainMenu";
@@ -17,22 +16,30 @@ import timeOrMasterMenu from "./menus/timeOrMasterMenu";
 import masterMenu from "./menus/masterMenu";
 import timeMenu from "./menus/timeMenu";
 import confirmMenu from "./menus/confirmMenu";
-import supabaseClient from "./supabase";
+
+import { addNewClient, getUserByTelegramId } from "./api";
 dotenv.config();
 
 interface SessionData {
   currentDayTable: [][];
 
-  chosenWeek?: string;
-  chosenDay?: string;
-  chosenTime?: string;
-  chosenProcedure?: string;
-  chosenMaster?: string;
+  allProcedures?: {};
 
-  phoneNumber?: string;
-  fullName?: string;
-  login?: string;
-  telegramId?: number;
+  appointment: {
+    week?: string;
+    day?: string;
+    time?: string;
+    procedureId?: string;
+    master: { name?: string; id?: number };
+  };
+
+  user: {
+    phoneNumber?: string;
+    fullName?: string;
+    login?: string;
+    telegramId?: number;
+  };
+
   waitingForFullName?: boolean;
   waitingForContact?: boolean;
 }
@@ -41,34 +48,16 @@ type MyContext = Context & SessionFlavor<SessionData>;
 
 const bot = new Bot<MyContext>(process.env.BOT_ID as string);
 
-// Middleware to handle sessions
 bot.use(
   session({
     initial: (): SessionData => ({
       currentDayTable: [],
-      chosenDay: "",
-      chosenTime: "",
-      chosenProcedure: "",
-      chosenMaster: "",
-      chosenWeek: "",
+      user: {},
+      appointment: { master: {} },
     }),
     storage: new MemorySessionStorage(),
   })
 );
-
-bot.callbackQuery(/^time:/, async (ctx) => {
-  const data = ctx.callbackQuery.data;
-
-  const [, dateRange, hours, minutes] = data.split(":");
-
-  await ctx.answerCallbackQuery();
-
-  await ctx.deleteMessage();
-
-  await ctx.reply(`✅Вы записаны на: ${dateRange} в ${hours}:${minutes}`);
-
-  insertClient(dateRange, `${hours}:${minutes}`);
-});
 
 // menus register
 timeMenu.register(confirmMenu);
@@ -92,11 +81,12 @@ bot.use(mainMenu);
 bot.api.setMyCommands([
   { command: "menu", description: "Меню" },
   { command: "help", description: "Связаться с менеджером" },
-  { command: "data", description: "Просмотреть таблицу" },
 ]);
 
 // Команда /start
 bot.command("start", async (ctx) => {
+  console.log(ctx.from);
+
   // Создаем клавиатуру с кнопкой "Поделиться номером"
   const contactKeyboard = new Keyboard()
     .requestContact("📱 Поделиться номером")
@@ -113,52 +103,39 @@ bot.command("start", async (ctx) => {
 });
 
 bot.command("menu", async (ctx) => {
-  if (!ctx.session.phoneNumber) {
-    const keyboard = new Keyboard()
-      .requestContact("Поделиться номером телефона")
-      .resized() // Автоматическое масштабирование
-      .oneTime(); // Скрыть после нажатия
+  ctx.session = {
+    currentDayTable: [],
+    user: {},
+    appointment: { master: {} },
+  };
 
-    await ctx.reply(
-      "Для работы с ботом, пожалуйста, авторизуйтесь через свой номер телефона и укажите ФИО:",
-      {
-        reply_markup: {
-          keyboard: keyboard,
-          resize_keyboard: true,
-          one_time_keyboard: true,
-        },
-      }
-    );
+  const { user, error } = await getUserByTelegramId(String(ctx.from?.id));
+  console.log("user", user);
+  console.log("error", error);
+
+  ctx.session.user = {
+    phoneNumber: user?.phone,
+    fullName: user?.name,
+    login: user?.telegram_login,
+    telegramId: user?.telegram_id,
+  };
+
+  if (!user && !ctx.session.user.phoneNumber) {
+    // Создаем клавиатуру с кнопкой "Поделиться номером"
+    const contactKeyboard = new Keyboard()
+      .requestContact("📱 Поделиться номером")
+      .resized() // Кнопка подстраивается под размер
+      .oneTime(); // Скрывается после нажатия
+
+    await ctx.reply("👋 Добро пожаловать в бот студии маникюра «Ноготочки»!");
+    await ctx.reply("📞 Для входа поделитесь своим номером телефона:", {
+      reply_markup: contactKeyboard,
+    });
+
+    // Устанавливаем флаг ожидания номера
+    ctx.session.waitingForContact = true;
   } else {
     await ctx.reply("Главное меню:", { reply_markup: mainMenu });
-  }
-});
-
-bot.command("data", async (ctx) => {
-  try {
-    let { data: appointments, error } = await supabaseClient
-      .from("appointments")
-      .select("*")
-      .eq("telegram_id", ctx.session.telegramId);
-
-    // Filters
-
-    // const rows = await getSheetData();
-
-    // if (rows.length === 0) {
-    //   await ctx.reply("Нет данных в таблице.");
-    //   return;
-    // }
-
-    // const message = rows.map((row) => row.join(" | ")).join("\n");
-    appointments?.forEach(async (appointment, index) => {
-      await ctx.reply(
-        `Запись ${index}: ${appointment.procedure}, ${appointment.date}, ${appointment.slot_time}`
-      );
-    });
-  } catch (err) {
-    console.error(err);
-    await ctx.reply("Ошибка при получении данных из Google Sheets");
   }
 });
 
@@ -166,8 +143,6 @@ bot.catch((err) => {
   console.error("Error in bot:", err);
 });
 
-// Обработка полученного контакта
-// Обработка ТОЛЬКО контакта (игнорируем ручной ввод)
 bot.on("message:contact", async (ctx) => {
   if (!ctx.session.waitingForContact) return;
 
@@ -189,9 +164,9 @@ bot.on("message:contact", async (ctx) => {
     : contact.first_name || "Пользователь";
 
   // Сохраняем данные
-  ctx.session.phoneNumber = phoneNumber;
-  ctx.session.login = login;
-  ctx.session.telegramId = telegramId;
+  ctx.session.user.phoneNumber = phoneNumber;
+  ctx.session.user.login = login;
+  ctx.session.user.telegramId = telegramId;
   ctx.session.waitingForContact = false;
 
   // Убираем клавиатуру
@@ -229,31 +204,24 @@ bot.on("message:text", async (ctx) => {
     }
 
     // Сохраняем ФИО
-    ctx.session.fullName = fullName;
+    ctx.session.user.fullName = fullName;
     ctx.session.waitingForFullName = false;
 
     await ctx.reply(`🎉 Отлично, ${fullName}! Вы авторизованы.`, {
       reply_markup: mainMenu, // Ваше главное меню
     });
 
-    const { data, error } = await supabaseClient
-      .from("clients")
-      .insert([
-        {
-          telegram_id: ctx.session.telegramId,
-          telegram_login: ctx.session.login,
-          name: ctx.session.fullName,
-          phone: ctx.session.phoneNumber,
-        },
-      ])
-      .select();
-    console.log("inserted data", data);
-    console.log("error", error);
+    const error = await addNewClient({
+      telegramId: ctx.session.user.telegramId,
+      phoneNumber: ctx.session.user.phoneNumber,
+      telegramLogin: ctx.session.user.login,
+      userName: ctx.session.user.fullName,
+    });
 
     console.log("Пользователь авторизован:", {
-      phoneNumber: ctx.session.phoneNumber,
-      fullName: ctx.session.fullName,
-      login: ctx.session.login,
+      phoneNumber: ctx.session.user.phoneNumber,
+      fullName: ctx.session.user.fullName,
+      login: ctx.session.user.login,
     });
   }
 });

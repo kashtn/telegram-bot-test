@@ -2,9 +2,13 @@ import { Menu } from "@grammyjs/menu";
 import { EMenu } from "./EMenu";
 
 const timeOrMasterMenu = new Menu(EMenu.timeOrMasterMenu)
-  .submenu("🙍🏼‍♀️ Выбрать мастера", EMenu.masterMenu)
+  .submenu("🙍🏼‍♀️ Выбору мастера", EMenu.masterMenu, async (ctx) => {
+    await ctx.editMessageText("Выберите мастера:");
+  })
   .row()
-  .submenu("🕘 Выбрать время", EMenu.timeMenu)
+  .submenu("🕘 Выбору времени", EMenu.timeMenu, async (ctx) => {
+    await ctx.editMessageText("Выберите время:");
+  })
   .row();
 
 timeOrMasterMenu.back("⬅️ Назад");

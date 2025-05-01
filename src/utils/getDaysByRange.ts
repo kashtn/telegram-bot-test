@@ -28,6 +28,3 @@ export function getDatesBetween(rangeStr: string) {
 
   return dates;
 }
-
-const dateRange = "27.04 - 29.04";
-console.log(getDatesBetween(dateRange));

@@ -1,78 +1,50 @@
 import { Menu } from "@grammyjs/menu";
 import { EMenu } from "./EMenu";
 import mainMenu from "./mainMenu";
-import { insertClient, updateSheet } from "../googleSheets";
 import supabaseClient from "../supabase";
-import { convertToUnix } from "../utils/convertToUnix";
 import { convertToDate } from "../utils/convertToDate";
 
-const confirmMenu = new Menu(EMenu.confirmMenu).dynamic((ctx, range) => {
-  const { chosenDay, chosenTime, chosenMaster, chosenProcedure } = ctx.session;
+const confirmMenu = new Menu(EMenu.confirmMenu).dynamic(async (ctx, range) => {
+  const { day, time, master, procedureId } = ctx.session.appointment;
 
-  range.text(
-    `${chosenProcedure} на ${chosenDay} в ${chosenTime}. Мастер: ${chosenMaster}`
-  );
+  // await ctx.editMessageText(
+  //   `${ctx.session.allProcedures[procedureId].translation} на ${day} в ${time}. Мастер: ${master.name}`
+  // );
+
   range.row();
   range.text("✅ Подтвердить", async (ctx) => {
-    const masterIndex = ctx.session.currentDayTable[0].indexOf(
-      ctx.session.chosenMaster
-    );
-
-    const timeIndex = ctx.session.currentDayTable.findIndex(
-      (row: string) => row[0] === ctx.session.chosenTime
-    );
-
-    ctx.session.currentDayTable[timeIndex][masterIndex] =
-      ctx.session.phoneNumber;
-
-    const letter = columnIndexToLetter(masterIndex);
-
-    updateSheet(
-      `${ctx.session.chosenDay}.25!${letter}${timeIndex + 1}`,
-      `${ctx.session.fullName}(${
-        ctx.session.login
-      }) - ${ctx.session.phoneNumber.replace(/.(?=.{4})/g, "*")}`
-    );
-
     const { data, error } = await supabaseClient
       .from("appointments")
       .insert([
         {
-          telegram_id: ctx.session.telegramId,
-          master_id: chosenMaster[chosenMaster.length - 1],
-          date: convertToDate(chosenDay),
-          slot_time: chosenTime,
-          procedure_id: "manikur",
+          client_id: ctx.session.user.telegramId,
+          master_id: master.id,
+          date: convertToDate(day),
+          time_slot: time,
+          procedure_id: procedureId,
         },
       ])
       .select();
 
-    console.log("inserted data", data);
     console.log("error", error);
 
-    try {
-      await ctx.deleteMessage(); // удаляем старое меню
+    if (error) {
+      await ctx.reply(`Ошибка при подтверждени записи`);
+    } else {
+      await ctx.deleteMessage();
       await ctx.reply(
-        `Вы подтвердили запись: ${chosenProcedure} на ${chosenDay} в ${chosenTime}. Мастер: ${chosenMaster}`
+        `Вы подтвердили запись: ${ctx.session.allProcedures[procedureId].translation} на ${day} в ${time}. Мастер: ${master.name}`
       );
       await ctx.reply("Главное меню:", { reply_markup: mainMenu });
-    } catch (error) {
-      console.error("Ошибка при подтверждении:", error);
+      ctx.session = {
+        currentDayTable: [],
+        user: {},
+        appointment: { master: {} },
+      };
     }
   });
   range.row();
+  range.back("⬅️ Назад");
 });
 
-confirmMenu.back("⬅️ Назад");
-
 export default confirmMenu;
-
-function columnIndexToLetter(index: number) {
-  let columnLetter = "";
-  while (index >= 0) {
-    columnLetter =
-      String.fromCharCode((index % 26) + "A".charCodeAt(0)) + columnLetter;
-    index = Math.floor(index / 26) - 1;
-  }
-  return columnLetter;
-}

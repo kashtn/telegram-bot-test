@@ -7,11 +7,9 @@ const weekMenu = new Menu(EMenu.weekMenu);
 getThreeWeeksRanges().forEach((week) => {
   weekMenu
     .submenu(week, EMenu.dayMenu, async (ctx) => {
-      // Сохраняем выбранную неделю в сессии
-      ctx.session.chosenWeek = week;
+      ctx.session.appointment.week = week;
 
-      // Переходим в подменю для выбора дней
-    //   await ctx.menu.nav(EMenu.dayMenu);
+      await ctx.editMessageText("Выберите день:");
     })
     .row();
 });

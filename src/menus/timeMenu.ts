@@ -1,24 +1,68 @@
 import { Menu } from "@grammyjs/menu";
 import { EMenu } from "./EMenu";
-import { getSheetData } from "../googleSheets";
+
 import { getCurrentDate } from "../utils/getCurrentDate";
+import { getAllTimeSlots, getMastersAppointmentsByDay } from "../api";
+import { convertToDate } from "../utils/convertToDate";
 
-const timeMenu = new Menu(EMenu.timeMenu);
+const timeMenu = new Menu(EMenu.timeMenu).dynamic(async (ctx, range) => {
+  const { timeSlots, error: timeSlotsError } = await getAllTimeSlots();
+  const timeSlotsArray = timeSlots?.map((timeSlot) => timeSlot.time) || [];
 
-const timesArray = await getSheetData(`${getCurrentDate()}!A:A`);
+  const { day, time, master, procedureId } = ctx.session.appointment;
 
-timesArray.forEach((timeArr) => {
-  if (timeArr.length) {
-    timeMenu
-      .submenu(timeArr[0], EMenu.masterMenu, (ctx) => {
-        console.log(">>", timeArr[0]);
+  let freeTimeSlots: string[] = [...timeSlotsArray];
+  console.log("debugger>>>>>>>>>>>>>>>>>", ctx.session.appointment.master);
 
-        ctx.session.chosenTime = timeArr[0];
-      })
-      .row();
+  // если мастер уже выбран
+  if (ctx.session.appointment.master?.id) {
+    const { appointments, error } = await getMastersAppointmentsByDay({
+      masterId: ctx.session.appointment.master.id,
+      day: convertToDate(ctx.session.appointment.day),
+    });
+
+    console.log("master appointments", appointments);
+
+    appointments?.forEach((appointment) => {
+      freeTimeSlots = freeTimeSlots.filter(
+        (timeSlot) => appointment.time_slot !== timeSlot
+      );
+    });
+
+    freeTimeSlots.forEach((timeSlot) => {
+      range
+        .submenu(timeSlot, EMenu.confirmMenu, async (ctx) => {
+          console.log(">>", timeSlot);
+
+          ctx.session.appointment.time = timeSlot;
+
+          await ctx.editMessageText(
+            `${ctx.session.allProcedures[procedureId].translation} на ${day} в ${timeSlot}. Мастер: ${master.name}`
+          );
+        })
+        .row();
+    });
+  } else {
+    freeTimeSlots = [...timeSlotsArray];
+    console.log("no master", freeTimeSlots);
+
+    freeTimeSlots.forEach((timeSlot) => {
+      range
+        .submenu(timeSlot, EMenu.masterMenu, async (ctx) => {
+          console.log(">>", timeSlot);
+
+          ctx.session.appointment.time = timeSlot;
+
+          await ctx.editMessageText("Выберите мастера:");
+        })
+        .row();
+    });
   }
-});
 
-timeMenu.back("⬅️ Назад");
+  range.back("⬅️ Назад", (ctx) => {
+    ctx.session.appointment.time = null;
+    ctx.session.appointment.master = null;
+  });
+});
 
 export default timeMenu;
