@@ -1,18 +1,28 @@
-import { Bot, Context, session, SessionFlavor } from "grammy";
-import { Menu } from "@grammyjs/menu";
+import { Bot, Context, Keyboard, session, SessionFlavor } from "grammy";
 import { getSheetData, insertClient } from "./googleSheets";
-// import { format } from "date-fns";
-// import { ru } from "date-fns/locale";
 import dotenv from "dotenv";
+import { EMenu } from "./menus/EMenu";
+import mainMenu from "./menus/mainMenu";
+import weekMenu from "./menus/weekMenu";
+import dayMenu from "./menus/dayMenu";
+import processMenu from "./menus/processMenu";
+import timeOrMasterMenu from "./menus/timeOrMasterMenu";
+import masterMenu from "./menus/masterMenu";
+import timeMenu from "./menus/timeMenu";
+import confirmMenu from "./menus/confirmMenu";
 dotenv.config();
 
 interface SessionData {
-  step: "idle" | "awaiting_phone" | "awaiting_name" | "awaiting_date";
-  bookingData: {
-    phone?: string;
-    name?: string;
-    date?: string;
-  };
+  currentDayTable: [][];
+
+  chosenWeek?: string;
+  chosenDay?: string;
+  chosenTime?: string;
+  chosenProcess?: string;
+  chosenMaster?: string;
+
+  phoneNumber?: string;
+  userName?: string;
 }
 
 type MyContext = Context & SessionFlavor<SessionData>;
@@ -23,71 +33,94 @@ const bot = new Bot<MyContext>(process.env.BOT_ID as string);
 bot.use(
   session({
     initial: (): SessionData => ({
-      step: "idle",
-      bookingData: {},
+      currentDayTable: [],
+      chosenDay: "",
+      chosenTime: "",
+      chosenProcess: "",
+      chosenMaster: "",
+      chosenWeek: "",
     }),
   })
 );
 
-// Main menu
-const mainMenu = new Menu("main-menu")
-  .submenu("📝 Записаться", "ops-menu")
-  .row()
-  .text("📅 Мои записи", async (ctx) => {
-    return ctx.reply(`Ваши записи:`);
-  })
-  .row()
-  .text("👩‍💼 Связаться с менеджером", (ctx) => {
-    return ctx.reply(
-      "Для связи с менеджером:\n☎️ +7 (XXX) XXX-XX-XX\n✉️ manager@nogotochki.ru"
-    );
-  })
-  .row();
-
-const opsMenu = new Menu("ops-menu").submenu("💅 Маникюр", "dates-menu");
-
-const datesMenu = new Menu("dates-menu");
-
-getThreeWeeksRanges().forEach((week) => {
-  datesMenu.text(week, async (ctx) => {
-    const times = ["10:00", "12:00", "14:00", "16:00", "18:00"];
-    times.forEach((time) => {});
-    const buttons = times.map((t) => [
-      { text: t, callback_data: `time:${week}:${t}` },
-    ]);
-    buttons.push([{ text: "🔙 Назад", callback_data: `back:ops` }]);
-    await ctx.editMessageText(`Вы выбрали ${week}. Выберите время:`, {
-      reply_markup: { inline_keyboard: buttons },
-    });
-  });
-  datesMenu.row();
-});
-
 bot.callbackQuery(/^time:/, async (ctx) => {
   const data = ctx.callbackQuery.data;
+
   const [, dateRange, hours, minutes] = data.split(":");
+
   await ctx.answerCallbackQuery();
+
   await ctx.deleteMessage();
+
   await ctx.reply(`✅Вы записаны на: ${dateRange} в ${hours}:${minutes}`);
 
   insertClient(dateRange, `${hours}:${minutes}`);
 });
 
-opsMenu.register(datesMenu);
+// menus register
+timeMenu.register(confirmMenu);
 
-mainMenu.register(opsMenu);
+masterMenu.register(confirmMenu);
+
+timeOrMasterMenu.register([masterMenu, timeMenu]);
+
+dayMenu.register(timeOrMasterMenu);
+
+weekMenu.register(dayMenu);
+
+processMenu.register(weekMenu);
+
+mainMenu.register(processMenu);
 
 bot.use(mainMenu);
 
+//
+
+bot.api.setMyCommands([
+  { command: "menu", description: "Меню" },
+  { command: "help", description: "Связаться с менеджером" },
+  { command: "data", description: "Просмотреть таблицу" },
+]);
+
 bot.command("start", async (ctx) => {
+  // Создание клавиатуры с кнопкой запроса контакта
+  const keyboard = new Keyboard()
+    .requestContact("Поделиться номером телефона")
+    .build();
+
+  await ctx.reply("Добро пожаловать в бот студии маникюра «Ноготочки»!");
+
   await ctx.reply(
-    "Добро пожаловать в бот студии маникюра «Ноготочки»!\nВыберите действие:",
-    { reply_markup: mainMenu }
+    "Для работы с ботом, пожалуйста, авторизуйтесь через свой номер телефона:",
+    {
+      reply_markup: {
+        keyboard: keyboard,
+        resize_keyboard: true,
+        one_time_keyboard: true,
+      },
+    }
   );
 });
 
 bot.command("menu", async (ctx) => {
-  await ctx.reply("Меню:", { reply_markup: mainMenu });
+  if (!ctx.session.phoneNumber) {
+    const keyboard = new Keyboard()
+      .requestContact("Поделиться номером телефона")
+      .build();
+
+    await ctx.reply(
+      "Для работы с ботом, пожалуйста, авторизуйтесь через свой номер телефона и укажите ФИО:",
+      {
+        reply_markup: {
+          keyboard: keyboard,
+          resize_keyboard: true,
+          one_time_keyboard: true,
+        },
+      }
+    );
+  } else {
+    await ctx.reply("Главное меню:", { reply_markup: mainMenu });
+  }
 });
 
 bot.command("data", async (ctx) => {
@@ -111,43 +144,18 @@ bot.catch((err) => {
   console.error("Error in bot:", err);
 });
 
-bot.api.setMyCommands([
-  { command: "menu", description: "Меню" },
-  { command: "help", description: "Связаться с менеджером" },
-  { command: "data", description: "Просмотреть таблицу" },
-]);
+// Обработка полученного контакта
+bot.on("message:contact", async (ctx) => {
+  const contact = ctx.message.contact;
+  const phoneNumber = contact.phone_number;
+  const firstName = contact.first_name;
+
+  ctx.session.phoneNumber = phoneNumber;
+  ctx.session.userName = firstName;
+
+  await ctx.reply(`Вы авторизовались! \nГлавное Меню:`, {
+    reply_markup: mainMenu,
+  });
+});
 
 bot.start();
-
-function getThreeWeeksRanges() {
-  const now = new Date();
-
-  const format = (date: Date) =>
-    date.toLocaleDateString("ru-RU", {
-      day: "2-digit",
-      month: "2-digit",
-    });
-
-  const currentWeekEnd = new Date(now);
-  currentWeekEnd.setDate(now.getDate() + ((7 - now.getDay()) % 7));
-
-  const currentRange = `${format(now)} - ${format(currentWeekEnd)}`;
-
-  const nextWeekStart = new Date(currentWeekEnd);
-  nextWeekStart.setDate(currentWeekEnd.getDate() + 1);
-  const nextWeekEnd = new Date(nextWeekStart);
-  nextWeekEnd.setDate(nextWeekStart.getDate() + 6);
-
-  const nextRange = `${format(nextWeekStart)} - ${format(nextWeekEnd)}`;
-
-  const afterNextWeekStart = new Date(nextWeekStart);
-  afterNextWeekStart.setDate(nextWeekStart.getDate() + 7);
-  const afterNextWeekEnd = new Date(afterNextWeekStart);
-  afterNextWeekEnd.setDate(afterNextWeekStart.getDate() + 6);
-
-  const afterNextRange = `${format(afterNextWeekStart)} - ${format(
-    afterNextWeekEnd
-  )}`;
-
-  return [currentRange, nextRange, afterNextRange];
-}

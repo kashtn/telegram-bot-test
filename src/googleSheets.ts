@@ -39,7 +39,7 @@ const getAuth = async () => {
   return auth;
 };
 
-export async function getSheetData() {
+export async function getSheetData(range: string) {
   const auth = await getAuth();
   const client = await auth.getClient();
 
@@ -47,14 +47,14 @@ export async function getSheetData() {
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: process.env.SHEET_ID,
-    range: RANGE,
+    range,
   });
 
   const rows = res.data.values;
   return rows || [];
 }
 
-export async function insertClient(date: string, time: string) {
+export async function insertClient(range: string, date: string, time: string) {
   const auth = new google.auth.GoogleAuth({
     keyFile: path.resolve(__dirname, "../credentials.json"),
     scopes: [
@@ -69,7 +69,7 @@ export async function insertClient(date: string, time: string) {
   //   await sheets.spreadsheets.values.
   const res = await sheets.spreadsheets.values.append({
     spreadsheetId: process.env.SHEET_ID,
-    range: RANGE,
+    range,
     valueInputOption: "USER_ENTERED",
     requestBody: {
       values: [[date, time]],
@@ -77,4 +77,31 @@ export async function insertClient(date: string, time: string) {
   });
   console.log(res.data);
   return res.data;
+}
+
+export async function updateSheet(range: string, payload: string) {
+  const auth = await getAuth();
+  const client = await auth.getClient();
+
+  const sheets = google.sheets({ version: "v4", auth: client });
+
+  const spreadsheetId = process.env.SHEET_ID; // Замените вашим идентификатором таблицы
+
+  const values = [[payload]];
+
+  const resource = {
+    values,
+  };
+
+  try {
+    const response = await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range,
+      valueInputOption: "RAW",
+      resource,
+    });
+    console.log(`${response.data.updatedCells} ячеек было обновлено.`);
+  } catch (err) {
+    console.error("Ошибка обновления таблицы:", err);
+  }
 }
