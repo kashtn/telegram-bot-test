@@ -5,8 +5,9 @@ import { getCurrentDate } from "../utils/getCurrentDate";
 import { getAllMasters, getAppointmentsByTimeSlot, IMaster } from "../api";
 import { time } from "console";
 import { convertToDate } from "../utils/convertToDate";
+import { TContext } from "../bot";
 
-const masterMenu = new Menu(EMenu.masterMenu).dynamic(async (ctx, range) => {
+const masterMenu = new Menu<TContext>(EMenu.masterMenu).dynamic(async (ctx, range) => {
   const { masters, error } = await getAllMasters();
   console.log("mastersFromDB", masters);
   let freeMasters: IMaster[] = [...(masters || [])];

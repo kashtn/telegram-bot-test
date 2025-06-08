@@ -1,8 +1,9 @@
 import { Menu } from "@grammyjs/menu";
 import { EMenu } from "./EMenu";
 import { getThreeWeeksRanges } from "../utils/getThreeWeeksRanges";
+import { TContext } from "../bot";
 
-const weekMenu = new Menu(EMenu.weekMenu);
+const weekMenu = new Menu<TContext>(EMenu.weekMenu);
 
 getThreeWeeksRanges().forEach((week) => {
   weekMenu

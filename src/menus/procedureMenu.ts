@@ -2,8 +2,9 @@ import { Menu } from "@grammyjs/menu";
 import { EMenu } from "./EMenu";
 import weekMenu from "./weekMenu";
 import { getAllProcedures, IProcedure } from "../api";
+import { TContext } from "../bot";
 
-const procedureMenu = new Menu(EMenu.procedureMenu).dynamic(
+const procedureMenu = new Menu<TContext>(EMenu.procedureMenu).dynamic(
   async (ctx, range) => {
     let { procedures, error } = await getAllProcedures();
 

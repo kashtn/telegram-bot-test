@@ -1,8 +1,9 @@
 import { Menu } from "@grammyjs/menu";
 import { EMenu } from "./EMenu";
 import { getUsersAppointmentsByTelegramId } from "../api";
+import { TContext } from "../bot";
 
-const mainMenu = new Menu("main-menu")
+const mainMenu = new Menu<TContext>("main-menu")
   .submenu("📝 Записаться", EMenu.procedureMenu, async (ctx) => {
     await ctx.editMessageText("Выберите процедуру:");
   })

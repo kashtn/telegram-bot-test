@@ -4,8 +4,9 @@ import { EMenu } from "./EMenu";
 import { getCurrentDate } from "../utils/getCurrentDate";
 import { getAllTimeSlots, getMastersAppointmentsByDay } from "../api";
 import { convertToDate } from "../utils/convertToDate";
+import { TContext } from "../bot";
 
-const timeMenu = new Menu(EMenu.timeMenu).dynamic(async (ctx, range) => {
+const timeMenu = new Menu<TContext>(EMenu.timeMenu).dynamic(async (ctx, range) => {
   const { timeSlots, error: timeSlotsError } = await getAllTimeSlots();
   const timeSlotsArray = timeSlots?.map((timeSlot) => timeSlot.time) || [];
 

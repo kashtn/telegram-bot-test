@@ -5,17 +5,20 @@ import {
   session,
   SessionFlavor,
   MemorySessionStorage,
+  InlineKeyboard,
 } from "grammy";
+import { MenuFlavor } from "@grammyjs/menu";
+import { HydrateFlavor, hydrate } from "@grammyjs/hydrate";
+
 import dotenv from "dotenv";
-import { EMenu } from "./menus/EMenu";
 import mainMenu from "./menus/mainMenu";
 import weekMenu from "./menus/weekMenu";
 import dayMenu from "./menus/dayMenu";
-import procedureMenu from "./menus/procedureMenu";
 import timeOrMasterMenu from "./menus/timeOrMasterMenu";
 import masterMenu from "./menus/masterMenu";
 import timeMenu from "./menus/timeMenu";
 import confirmMenu from "./menus/confirmMenu";
+import procedureMenu from "./menus/procedureMenu";
 
 import { addNewClient, getUserByTelegramId } from "./api";
 dotenv.config();
@@ -44,10 +47,13 @@ interface SessionData {
   waitingForContact?: boolean;
 }
 
-type MyContext = Context & SessionFlavor<SessionData>;
+export type TContext = HydrateFlavor<
+  Context & SessionFlavor<SessionData> & MenuFlavor
+>;
 
-const bot = new Bot<MyContext>(process.env.BOT_ID as string);
+const bot = new Bot<TContext>(process.env.BOT_ID as string);
 
+bot.use(hydrate());
 bot.use(
   session({
     initial: (): SessionData => ({
@@ -64,9 +70,9 @@ timeMenu.register(confirmMenu);
 
 masterMenu.register(confirmMenu);
 
-timeOrMasterMenu.register([masterMenu, timeMenu]);
+// timeOrMasterMenu.register([masterMenu, timeMenu]);
 
-dayMenu.register(timeOrMasterMenu);
+// dayMenu.register(timeOrMasterMenu);
 
 weekMenu.register(dayMenu);
 
@@ -79,8 +85,9 @@ bot.use(mainMenu);
 //
 
 bot.api.setMyCommands([
-  { command: "menu", description: "Меню" },
-  { command: "help", description: "Связаться с менеджером" },
+  // { command: "menu", description: "Меню" },
+  // { command: "help", description: "Связаться с менеджером" },
+  { command: "webapp", description: "Приложение" },
 ]);
 
 // Команда /start
@@ -101,6 +108,20 @@ bot.command("start", async (ctx) => {
   // Устанавливаем флаг ожидания номера
   ctx.session.waitingForContact = true;
 });
+
+bot.command("webapp", async (ctx) => {
+  const keyboard = new InlineKeyboard()
+    .webApp("Открыть приложение", "https://nail-studio-webapp.netlify.app/");
+
+  await ctx.reply("Нажмите кнопку для открытия веб-приложения:", {
+    reply_markup: keyboard,
+  });
+});
+
+// bot.on("web_app_data", async (ctx) => {
+//   const dataFromWebApp = ctx.webAppData?.data; // Данные в формате строки
+//   await ctx.reply(`Получено: ${dataFromWebApp}`);
+// });
 
 bot.command("menu", async (ctx) => {
   ctx.session = {
@@ -212,9 +233,9 @@ bot.on("message:text", async (ctx) => {
     });
 
     const error = await addNewClient({
-      telegramId: ctx.session.user.telegramId,
-      phoneNumber: ctx.session.user.phoneNumber,
-      telegramLogin: ctx.session.user.login,
+      telegramId: ctx.session.user.telegramId || 0,
+      phoneNumber: ctx.session.user.phoneNumber || "",
+      telegramLogin: ctx.session.user.login || "",
       userName: ctx.session.user.fullName,
     });
 
